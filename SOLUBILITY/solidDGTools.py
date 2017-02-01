@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import numpy as np
 import pickle
+import parmed
 import sys
 
 def calculate_density( nMol, gro_file ):
@@ -448,7 +449,22 @@ def calculate_DG_from_object(results, nmols, estimator='MBAR'):
     calc = results.dFs[-1][estimator]/nmols
     return calc, d_calc
 
+def chargeFix( mol2_filename = 'molecule.mol2' ):
+    """ Corrects the mol2 file partial atom charges to have a
+        total net integer molecule charge
+        """
+    mol2f = parmed.formats.Mol2File
+    mol2f.write(parmed.load_file(mol2_filename).fix_charges(),mol2_filename)
+    return
 
+def amber_to_gmx( prmtop, inpcrd ):
+    """ Gets amber topology and coordinate files and convert
+        them to the GROMACS format
+        """
+    gromacs_topology = parmed.load_file(prmtop, inpcrd)
+    gromacs_topology.save(options.parmfile.split('.')[0]+'.top', format='gromacs')
+    gromacs_topology.save(options.parmfile.split('.')[0]+'.gro')
+    return
 
 
 
