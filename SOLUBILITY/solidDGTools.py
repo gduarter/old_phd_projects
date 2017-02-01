@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import numpy as np
+import pickle
 import sys
 
 def calculate_density( nMol, gro_file ):
@@ -124,17 +125,6 @@ def find_molar_mass(matrix, molecule):
             sys.exit()
     return molar_mass
 
-def find_chemPot_solid_component( txtfile, nmols ):
-    try:
-        with open(txtfile, 'r') as table:
-            for line in table.readlines():
-                if 'TOTAL:' in line:
-                    line = line.split()
-                    DG = -float(line[-3]) # for MBAR
-        return DG/nmols
-    except IOError:
-        return 'error'
-
 def find_nmols( topfile ):
     with open( topfile ) as top:
         top_lines = top.readlines()
@@ -142,23 +132,6 @@ def find_nmols( topfile ):
         if 'UNK' in line:
             nmols = float(line.split()[1]) + 1
     return nmols
-
-def calculate_error_solid( txtfile, nmols ):
-    with open( txtfile ) as txt:
-        txt_lines = txt.readlines()
-    count = []
-    idx = 0
-    for line in txt_lines:
-        if 'States' in line:
-            count.append[idx + 2]
-        elif 'TOTAL:' in line:
-            count.append[idx - 2]
-        idx += 1
-    errors = []
-    for elem in txt_lines[count[0]:(count[1]+1)]:
-        errors.append(float(elem.split()[-1]))
-    errors = np.array(errors)/nmols
-    return np.sqrt(np.dot(errors,errors))
 
 def create_turnoff_forcefield( kspring, top_file, nAtom, ff_off_file ="morph.top" ):
     """ Organize 2 state topology for free energy calculation 
@@ -319,14 +292,14 @@ def create_turnoff_forcefield( kspring, top_file, nAtom, ff_off_file ="morph.top
     for elem in indices:                                                                                                                                                                                                     
         if '[ molecules ]' in elem:                                                                                                                                                                                          
             count = elem[0]                                                                                                                                                                                                      
-    last = top_lines[count:]                                                                                                                                                                                                 
+    last = top_lines[count:]
     nMol = int(last[-1][:-1].split()[1])                                                                                                                                                                                     
     fix, unk = 1, nMol - 1                                                                                                                                                                                                   
     fin = last[:2] + ['FIX       %s\n'%fix,'UNK       %s\n'%unk]                                                                                                                                                             
     # Build topology file list                                                                                                                                                                                               
     top1 = top_lines[:lim]+['\n']+new_atomtypes+['\n']+fix_moltype+['\n']+final_fix+['\n']+final_bonds+['\n']                                                                                                                 
     top2 = final_pairs+['\n']+final_angles+['\n']+final_dihedrals+['\n']+pos_res_fix +['\n']+unk_moltype+['\n']                                                                                                              
-    top3 = final_unk+['\n']+final_bonds+['\n']+final_pairs+['\n']+final_angles+['\n']+final_dihedrals+['\n']+pos_res_unk+['\n']+fin                                                                                          
+    top3 = final_unk+['\n']+final_bonds+['\n']+final_pairs+['\n']+final_angles+['\n']+final_dihedrals+['\n']+pos_res_unk+['\n']+['[ system ]\n','molecule\n','\n']+fin
     new_top = top1+top2+top3                                                                                                                                                                                                 
     g = open(ff_off_file,"wb")
     for elem in new_top:
@@ -439,6 +412,54 @@ def create_turnoff_springs( kspring, nAtom, original_top, two_state_top="interac
         final_file.write("%s" % elem)                                                                                                                                                                                        
     final_file.close()                                                                                                                                                                                                       
     return
+
+def error_propagation_sum( error_array ):
+    """ Calculates the propagated error
+    VARIABLE          I/O         Type        Description
+    --------------------------------------------------------------------------------------------
+    error_array       input       np.array    array containing calculated errors of each state
+
+    """
+    return np.sqrt(np.dot(error_array,error_array))
+
+
+def calculate_DG_from_object(results, nmols, estimator='MBAR'):
+    """ Calculates DG from alchemical_analysis result object (after loaded from pickle file)
+        VARIABLE          I/O         Type        Description
+        --------------------------------------------------------------------------------------------
+        results           input       results     object created by alchemical_analysis.py containing
+                                                  all free energy differences between the states 
+                                                  obtained from different estimators
+        estimator         input       string      name of the estimator selected by the user. Default:
+                                                  MBAR. Total available: TI, TI-CUBIC, BAR, MBAR.
+        nmols             input       integer     number of molecules inside the crystal box.
+        calc              output      float       total free energy of the process
+        d_calc            output      float       associated error to the total free energy.
+        
+    """
+    #add conditional wrt estimator
+    if estimator not in ['TI', 'TI-CUBIC', 'BAR', 'MBAR']:
+        print('Select TI, TI-CUBIC, BAR or MBAR')
+        return 
+    #calculate d_calc
+    errors = np.array([elem[estimator] for elem in results.ddf_allk])/nmols
+    d_calc = np.sqrt(np.dot(errors,errors))
+    #find calc
+    calc = results.dFs[-1][estimator]/nmols
+    return calc, d_calc
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
